@@ -24,6 +24,7 @@ void main(void) {
 precision highp float;
 uniform float t; // time
 varying vec2 pos; // relative position on quad
+
 void main( void ) {
   vec4 color = vec4(
     abs( sin( t / 11.3 ) ) * pos.x,
@@ -53,6 +54,10 @@ var Timer = {
 }
 
 function start() {
+
+  editor = document.getElementById( "editor" );
+  editor.textContent = shaderString( "shader-fs" );
+
   canvas = document.getElementById( "glcanvas" );
   gl = initWebGL( canvas );      // Initialize the GL context
   if (gl) {
@@ -63,20 +68,105 @@ function start() {
     initShaders();
     initBuffers();
     onWindowResize();
-    window.addEventListener( 'resize', onWindowResize, false );
+    window.addEventListener( "resize", onWindowResize, false );
+    document.addEventListener( "keydown", onKeys, false );
+    document.getElementById( 'editor' ).focus();
     setInterval( render, 1/60.0*1000 );
   }
+}
+
+function onKeys( e ) {
+  if( e.keyCode == 9 || e.which == 9 ) return false; // ignore tabs
+  switch( e.keyCode ) {
+    case 32: if( e.ctrlKey ) toggleEditor(); break; // on ctrl+space
+    case 13: if( e.ctrlKey ) useCurrentShader(); break; // on ctrl+return
+    case 27: if( e.ctrlKey ) toggleFullscreen(); break; // on ctrl+esc
+  }
+}
+
+function toggleEditor( event ) {
+  var editor = document.getElementById( "editor" );
+  if( editor.style.visibility == "hidden" ) {
+    editor.style.visibility = "";
+    editor.focus();
+  } else {
+    editor.style.visibility = "hidden";
+  }
+}
+
+function useCurrentShader() {
+  var vertexShader = getShader( gl, "shader-vs" );
+
+  var fragmentShaderStr = shaderString( "editor" );
+  var fragmentShader = gl.createShader( gl.FRAGMENT_SHADER ); 
+  gl.shaderSource( fragmentShader, fragmentShaderStr );
+  gl.compileShader( fragmentShader );
+  
+  // Check for compile errors  
+  if( !gl.getShaderParameter( fragmentShader, gl.COMPILE_STATUS ) ) {
+    alert( "Shader compilation failed:\n\n" + gl.getShaderInfoLog( fragmentShader ) );
+    return;
+  }
+ 
+  // Create the shader program
+  shaderProgram = gl.createProgram();
+  gl.attachShader( shaderProgram, vertexShader );
+  gl.attachShader( shaderProgram, fragmentShader );
+  gl.linkProgram( shaderProgram );
+  
+  // If creating the shader program failed, alert
+  if( !gl.getProgramParameter( shaderProgram, gl.LINK_STATUS ) ) {
+    alert( "Unable to initialize the shader program" );
+    return;
+  }
+  
+  gl.useProgram( shaderProgram );
+
+  timeUniform = gl.getUniformLocation( shaderProgram, 't' );
+  
+  vertexPositionAttribute = gl.getAttribLocation( shaderProgram, "vert" );
+  gl.enableVertexAttribArray( vertexPositionAttribute );
+}
+
+function toggleFullscreen() {
+  if (!document.fullscreenElement &&    // alternative standard method
+      !document.mozFullScreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement ) {  // current working methods
+    startFullscreen();
+  } else {
+    stopFullscreen();
+  }
+}
+function startFullscreen() {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen();
+    } else if (document.documentElement.msRequestFullscreen) {
+      document.documentElement.msRequestFullscreen();
+    } else if (document.documentElement.mozRequestFullScreen) {
+      document.documentElement.mozRequestFullScreen();
+    } else if (document.documentElement.webkitRequestFullscreen) {
+      document.documentElement.webkitRequestFullscreen(Element.ALLOW_KEYBOARD_INPUT);
+    }
+}
+function stopFullscreen() {
+    if (document.exitFullscreen) {
+      document.exitFullscreen();
+    } else if (document.msExitFullscreen) {
+      document.msExitFullscreen();
+    } else if (document.mozCancelFullScreen) {
+      document.mozCancelFullScreen();
+    } else if (document.webkitExitFullscreen) {
+      document.webkitExitFullscreen();
+    }  
 }
 
 function onWindowResize( event ) {
   canvas.width = window.innerWidth;
   canvas.height = window.innerHeight;
 
-  //arameters.screenWidth = canvas.width;
-  //parameters.screenHeight = canvas.height;
-
-  //parameters.aspectX = canvas.width/canvas.height ;
-  //parameters.aspectY = 1.0 ;
+  //screenWidth = canvas.width;
+  //screenHeight = canvas.height;
+  //aspectX = canvas.width/canvas.height ;
+  //aspectY = 1.0 ;
 
   gl.viewport( 0, 0, canvas.width, canvas.height );
 }
@@ -128,6 +218,27 @@ function initShaders() {
   vertexPositionAttribute = gl.getAttribLocation( shaderProgram, "vert" );
   gl.enableVertexAttribArray( vertexPositionAttribute );
   
+}
+
+function shaderString( id ) {
+  var scriptnode = document.getElementById( id );
+  
+  // Didn't find an element with the specified ID; abort.
+  if( !scriptnode ) {
+    return null;
+  }
+  
+  // Walk through the source element's children, building the
+  // shader source string.  
+  var src = "";
+  var p = scriptnode.firstChild;
+  while( p ) {
+    if( p.nodeType == 3 ) {
+      src += p.textContent;
+    }
+    p = p.nextSibling;
+  }
+  return src;
 }
 
 function getShader( gl, id ) {
@@ -188,6 +299,7 @@ function initBuffers() {
 <style type="text/css">
 html, body {
   margin: 0px;
+  overflow: hidden;
 }
 #glcanvas {
   width: 100%;
@@ -197,16 +309,18 @@ html, body {
 #editor {
   position: absolute;
   top: 0px;
-  width: 100%;
-  height: 100%;
-  color: #889988;
+  width: 40%;
+  height: 95%;
+  color: #99aa99;
   font-family: Monospace;
   font-size: 14px;
   font-weight: bold;
   text-shadow: rgba( 0, 0, 0, 0.75 ) 0px 1px 2px;
-  background-color: rgba(0,0,0,0.4);
+  background-color: rgba(0,0,0,0.2);
   padding: 1em;
-  visibility: hidden;
+  white-space: pre;
+  overflow: scroll;
+  outline: 0px solid transparent;
 }
 
 </style>
@@ -214,8 +328,8 @@ html, body {
 </head>
 
 <body onload="start()">
-  <canvas id="glcanvas" width="640" height="480">No HTML5 canvas support in the browser</canvas>
-  <div id="editor"></div>
+  <div id="editor" contenteditable="true" spellcheck="false"></div>
+  <canvas id="glcanvas" width="100%" height="100%">No HTML5 canvas support in the browser</canvas>
 </body>
 
 </html>
