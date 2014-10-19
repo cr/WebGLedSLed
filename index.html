@@ -47,12 +47,6 @@ var vertexPositionAttribute;
 var quadBuffer;
 var timeUniform;
 
-var Timer = {
-    started_at: Date.now(),
-    reset: function() { this.started_at = Date.now(); },
-    now: function() { return (Date.now()-this.started_at)/1000.0; },
-}
-
 function start() {
 
   editor = document.getElementById( "editor" );
@@ -71,8 +65,13 @@ function start() {
     window.addEventListener( "resize", onWindowResize, false );
     document.addEventListener( "keydown", onKeys, false );
     document.getElementById( 'editor' ).focus();
-    setInterval( render, 1/60.0*1000 );
+    tick();
   }
+}
+
+function tick( t ) {
+    render( t );
+    requestAnimationFrame( tick );
 }
 
 function onKeys( e ) {
@@ -84,7 +83,7 @@ function onKeys( e ) {
   }
 }
 
-function toggleEditor( event ) {
+function toggleEditor() {
   var editor = document.getElementById( "editor" );
   if( editor.style.visibility == "hidden" ) {
     editor.style.visibility = "";
@@ -136,6 +135,7 @@ function toggleFullscreen() {
     stopFullscreen();
   }
 }
+
 function startFullscreen() {
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen();
@@ -185,10 +185,10 @@ function initWebGL( canvas ) {
   return gl;
 }
 
-function render() {
+function render( t ) {
   gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
 
-  gl.uniform1f( timeUniform, Timer.now() );
+  gl.uniform1f( timeUniform, t/1000 ); // frame ms time in t
 
   gl.bindBuffer( gl.ARRAY_BUFFER, quadBuffer );
   gl.vertexAttribPointer( vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0 );
