@@ -22,16 +22,35 @@ void main(void) {
 
 <script id="shader-fs" type="x-shader/x-fragment">
 precision highp float;
-uniform float t; // time
+uniform float t; // relative time in seconds
+uniform float fft[6];
 varying vec2 pos; // relative position on quad
+
+// No variable array indexing in WebGL, sorry
+float ffti( int bin ) {
+  if( bin == 0 ) return fft[0];
+  else if( bin == 1 ) return fft[1];
+  else if( bin == 2 ) return fft[2];
+  else if( bin == 3 ) return fft[3];
+  else if( bin == 4 ) return fft[4];
+  else if( bin == 5 ) return fft[5];
+  //else if( bin == 6 ) return fft[6];
+  return 0.0;
+}
 
 void main( void ) {
   vec4 color = vec4(
-    abs( sin( t / 11.3 ) ) * pos.x,
-    abs( sin( t / 9.7 ) ) * pos.y,
-    1.0 - abs( cos( t / 8.3 ) ),
+    abs( sin( t / 17.0 ) ) * pos.x,
+   abs( sin( t / 13.0 ) ) * pos.y,
+    1.0 - abs( cos( t / 11.0 ) ),
     1.0
   );
+
+  int bin = int( pos.x * 5.99 );
+  float yoff = ffti( bin ) / 255.0;
+  if( pos.y<yoff ) {
+    color.b = sqrt(yoff)*0.8+0.2;
+  }
   gl_FragColor = color;
 }
 </script>
@@ -46,11 +65,16 @@ var shaderProgram;
 var vertexPositionAttribute;
 var quadBuffer;
 var timeUniform;
+var fftbins = 6;
+var fftUniform;
+var audio;
 
 function start() {
 
   Editor.init( 'editor' );
   Editor.write( shaderString( "shader-fs" ) );
+
+  audio = new Audio();
 
   canvas = document.getElementById( "glcanvas" );
   gl = initWebGL( canvas );      // Initialize the GL context
@@ -64,9 +88,40 @@ function start() {
     onWindowResize();
     window.addEventListener( "resize", onWindowResize, false );
     document.addEventListener( "keydown", onKeys, false );
-    tick();
+    tick( 0 );
   }
 }
+
+var audioctx;
+var analyser;
+var fftb = new Uint8Array( 1<<fftbins+1 );
+var fftf;
+var foo;
+function Audio() {
+    this.handleStream = function( stream ) {
+      foo=stream;
+      var src = audioctx.createMediaStreamSource( stream );
+      src.connect( analyser );
+    }
+
+    navigator.getUserMedia = (navigator.getUserMedia ||
+                              navigator.webkitGetUserMedia ||
+                              navigator.mozGetUserMedia ||
+                              navigator.msGetUserMedia);
+    this.ctx = new (window.AudioContext || window.webkitAudioContext)()
+    this.analyser = this.ctx.createAnalyser();
+    this.analyser.fftSize = 1<<fftbins+2;
+    this.analyser.minDecibels = -90;
+    this.analyser.maxDecibels = -20;
+    this.analyser.smoothingTimeConstant = 0.98;
+
+    // global references for handler
+    audioctx = this.ctx;
+    analyser = this.analyser;
+    navigator.getUserMedia ( { audio: true }, this.handleStream, function(err) { console.log( err );});
+
+}
+
 
 var Editor = {
   ed: null,
@@ -122,6 +177,7 @@ function useCurrentShader() {
   gl.useProgram( shaderProgram );
 
   timeUniform = gl.getUniformLocation( shaderProgram, 't' );
+  fftUniform = gl.getUniformLocation( shaderProgram, 'fft' );
   
   vertexPositionAttribute = gl.getAttribLocation( shaderProgram, "vert" );
   gl.enableVertexAttribArray( vertexPositionAttribute );
@@ -186,9 +242,19 @@ function initWebGL( canvas ) {
 }
 
 function render( t ) {
+  analyser.getByteFrequencyData( fftb );
+  fftf = []
+  for( var i=0 ; i<fftbins ; i++ ) {
+    var binlen = 1<<i;
+    var binstart = binlen-1;
+    var sum = 0;
+    for( var j = binstart ; j<binstart+binlen ; j++ ) sum += Math.exp(fftb[j+1]);
+    fftf.push( Math.log(sum/binlen) );
+  }
   gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
 
   gl.uniform1f( timeUniform, t/1000 ); // frame ms time in t
+  gl.uniform1fv( fftUniform, fftf );
 
   gl.bindBuffer( gl.ARRAY_BUFFER, quadBuffer );
   gl.vertexAttribPointer( vertexPositionAttribute, 3, gl.FLOAT, false, 0, 0 );
@@ -214,10 +280,10 @@ function initShaders() {
   gl.useProgram( shaderProgram );
 
   timeUniform = gl.getUniformLocation( shaderProgram, 't' );
-  
+  fftUniform = gl.getUniformLocation( shaderProgram, 'fft' );
+
   vertexPositionAttribute = gl.getAttribLocation( shaderProgram, "vert" );
   gl.enableVertexAttribArray( vertexPositionAttribute );
-  
 }
 
 function shaderString( id ) {
